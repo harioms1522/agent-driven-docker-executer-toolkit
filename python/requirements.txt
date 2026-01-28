@@ -1,0 +1,2 @@
+# ADDE Python client has no runtime dependencies beyond the standard library.
+# Install in development mode: pip install -e .

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adde"
+version = "0.1.0"
+description = "Agent-Driven Docker Executor – Python client for the ADDE Go CLI"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "ADDE" }]
+keywords = ["docker", "agent", "code-execution", "feedback-loop"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-timeout"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["adde*"]
