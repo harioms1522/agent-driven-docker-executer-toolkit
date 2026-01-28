@@ -38,14 +38,19 @@ def pull_image(
     return _call("pull_image", params, bin_path=bin_path)
 
 
-def _call(tool: str, params: dict, bin_path: Optional[str] = None) -> dict:
+def _call(
+    tool: str,
+    params: dict,
+    bin_path: Optional[str] = None,
+    timeout: int = 120,
+) -> dict:
     bin_ = bin_path or _find_adde()
     payload = json.dumps(params)
     out = subprocess.run(
         [bin_, tool, payload],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=timeout,
     )
     if out.returncode != 0:
         err = out.stderr.strip() or out.stdout.strip() or f"adde {tool} failed"
@@ -117,3 +122,72 @@ def cleanup_env(
     """Stops and removes the container."""
     params = {"container_id": container_id}
     return _call("cleanup_env", params, bin_path=bin_path)
+
+
+# ---- Image Builder & Factory ----
+
+
+def prepare_build_context(
+    files: dict[str, str],
+    context_id: Optional[str] = None,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Stages files (source code, configs, requirements) into a temporary directory for Docker build.
+    Auto-generates .dockerignore if missing; injects a standard Dockerfile if requirements.txt
+    or package.json exists but no Dockerfile is provided.
+
+    Returns dict with context_id (absolute path to build context dir), or error.
+    """
+    params: dict[str, Any] = {"files": files}
+    if context_id is not None:
+        params["context_id"] = context_id
+    return _call("prepare_build_context", params, bin_path=bin_path)
+
+
+def build_image_from_context(
+    context_id: str,
+    tag: str,
+    build_args: Optional[dict[str, str]] = None,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Runs docker build from the context directory (path from prepare_build_context).
+    Tag convention: agent-env:{task_id}-{timestamp}. Returns handshake:
+    { status, image_id, tag, size_mb, build_log_summary } or error/failed_layer.
+    """
+    params: dict[str, Any] = {"context_id": context_id, "tag": tag}
+    if build_args:
+        params["build_args"] = build_args
+    return _call(
+        "build_image_from_context", params, bin_path=bin_path, timeout=600
+    )
+
+
+def list_agent_images(
+    filter_tag: Optional[str] = None,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Returns a list of custom images created by the agent (tagged agent-env:...).
+    filter_tag: optional prefix filter (e.g. 'agent-env' or 'agent-env:task-123').
+    """
+    params: dict[str, Any] = {}
+    if filter_tag is not None:
+        params["filter_tag"] = filter_tag
+    return _call("list_agent_images", params, bin_path=bin_path)
+
+
+def prune_build_cache(
+    older_than_hrs: int = 0,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Cleans up intermediate build stages and unused build cache.
+    older_than_hrs: 0 = prune all unused; >0 = only prune cache older than that many hours.
+    Returns space_reclaimed_mb or error.
+    """
+    params: dict[str, Any] = {}
+    if older_than_hrs > 0:
+        params["older_than_hrs"] = older_than_hrs
+    return _call("prune_build_cache", params, bin_path=bin_path)
