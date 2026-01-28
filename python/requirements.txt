@@ -1,2 +1,3 @@
 # ADDE Python client has no runtime dependencies beyond the standard library.
 # Install in development mode: pip install -e .
+# For tests: pip install -e ".[dev]"  (adds pytest, pytest-timeout)

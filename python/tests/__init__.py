@@ -1,0 +1,1 @@
+# ADDE Python client tests

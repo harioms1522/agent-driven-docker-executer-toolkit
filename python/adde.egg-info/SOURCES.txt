@@ -1,0 +1,9 @@
+pyproject.toml
+adde/__init__.py
+adde/client.py
+adde.egg-info/PKG-INFO
+adde.egg-info/SOURCES.txt
+adde.egg-info/dependency_links.txt
+adde.egg-info/requires.txt
+adde.egg-info/top_level.txt
+tests/test_client.py

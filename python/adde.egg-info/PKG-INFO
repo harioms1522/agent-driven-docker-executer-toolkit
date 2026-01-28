@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: adde
+Version: 0.1.0
+Summary: Agent-Driven Docker Executor – Python client for the ADDE Go CLI
+Author: ADDE
+License: MIT
+Keywords: docker,agent,code-execution,feedback-loop
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-timeout; extra == "dev"

@@ -32,16 +32,18 @@ func runExec(ctx context.Context, cli *client.Client, containerID string, cmd []
 		return "", "", -1, 0, err
 	}
 
-	err = cli.ContainerExecStart(runCtx, createResp.ID, types.ExecStartCheck{})
-	if err != nil {
-		return "", "", -1, 0, err
-	}
-
+	// Attach before Start so we have the stream when the process runs; otherwise we can
+	// read "exec command has already run" instead of real stdout/stderr.
 	resp, err := cli.ContainerExecAttach(runCtx, createResp.ID, types.ExecStartCheck{})
 	if err != nil {
 		return "", "", -1, 0, err
 	}
 	defer resp.Close()
+
+	err = cli.ContainerExecStart(runCtx, createResp.ID, types.ExecStartCheck{})
+	if err != nil {
+		return "", "", -1, 0, err
+	}
 
 	var outBuf, errBuf bytes.Buffer
 	_, err = stdcopy.StdCopy(&outBuf, &errBuf, resp.Reader)

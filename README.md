@@ -171,6 +171,20 @@ go test -v .\cmd\adde -run ExeE2EBusyBox
 
 For BusyBox, use a **`.sh`** file and shell commands (e.g. `echo 42`); the executor runs it with `sh <path>`.
 
+## Testing the Python client
+
+From `python/`:
+
+```bash
+pip install -e ".[dev]"
+python -m pytest tests/ -v
+```
+
+If `pytest` is not on your PATH, use `python -m pytest` instead of `pytest`.
+
+- **Unit tests** mock subprocess and check that each client function passes the right tool and JSON to the binary. They need no binary or Docker.
+- **Integration tests** call the real `adde` binary when it is found (in `../go/adde.exe` or `../go/adde`, or via `ADDE_BIN`). They are skipped if the binary is missing or Docker is down. Build the Go CLI first to run them.
+
 ## Security
 
 - Containers use **network none** by default; set `network: true` when the agent explicitly needs access (e.g. `pip install`).

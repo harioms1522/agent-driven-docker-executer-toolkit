@@ -18,3 +18,8 @@ dev = ["pytest", "pytest-timeout"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["adde*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
