@@ -19,6 +19,8 @@ Go toolset + Python client for running agent-generated code in isolated Docker c
 - **`go/`** – Go module: `pkg/executor` library + `cmd/adde` CLI.
 - **`python/`** – Python package `adde` that calls the `adde` binary.
 
+**LangGraph:** see [LANGGRAPH.md](LANGGRAPH.md) for using this toolkit in a LangGraph (Python) project. Repo: [github.com/harioms1522/agent-driven-docker-executer-toolkit](https://github.com/harioms1522/agent-driven-docker-executer-toolkit) (`main` branch).
+
 ## Build and run
 
 ### 1. Build the Go CLI
