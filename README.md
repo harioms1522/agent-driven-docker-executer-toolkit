@@ -6,7 +6,7 @@ Go toolset + Python client for running agent-generated code in isolated Docker c
 
 | Requirement | Implementation |
 |-------------|-----------------|
-| **pull_image** | `image`; pulls from default registry so `create_runtime_env` can use it |
+| **pull_image** | `image`; pulls from Docker Hub, ECR, or custom registry; auth from env vars when set (see **Registry authentication**) |
 | **create_runtime_env** | `image`, `dependencies[]`, `env_vars{}`; workspace at `/workspace`; 512MB / 0.5 CPU; `--network none` unless `network: true`; optional `port_bindings` (e.g. `{"3000": "8080"}`); optional `use_image_cmd: true` to run the image CMD (e.g. server) instead of `sleep 86400` |
 | **execute_code_block** | `container_id`, `filename`, `code_content`; file via **put_archive** (no shell on code); hard **timeout** (default 30s) |
 | **get_container_logs** | `container_id`, `tail_lines`; returns `{ exit_code, stdout, stderr, execution_time }` (§3.B) |
@@ -42,6 +42,33 @@ go build -o adde ./cmd/adde       # Linux/macOS
 ```
 
 Ensure **Docker** is running and the daemon is reachable (e.g. `DOCKER_HOST` if remote). Use **pull_image** (or `docker pull`) before `create_runtime_env` if the image is not already present.
+
+### Registry authentication (Docker Hub, ECR, custom)
+
+**pull_image** uses registry credentials from environment variables when set, so you can pull from private Docker Hub, AWS ECR, or a custom registry.
+
+| Registry | Environment variables |
+|----------|------------------------|
+| **Docker Hub** | `ADDE_DOCKERHUB_USERNAME`, `ADDE_DOCKERHUB_PASSWORD` (or a personal access token as password) |
+| **AWS ECR** | Either set `ADDE_ECR_TOKEN` (pre-fetched token), or `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` (CLI will run `aws ecr get-login-password`). Optional: `ADDE_ECR_REGISTRY` (e.g. `123456789.dkr.ecr.us-east-1.amazonaws.com`) |
+| **Custom registry** | `ADDE_REGISTRY_URL` (host, e.g. `registry.example.com`), `ADDE_REGISTRY_USERNAME`, `ADDE_REGISTRY_PASSWORD`. The image reference host must match `ADDE_REGISTRY_URL`. |
+
+Examples:
+
+```bash
+# Docker Hub (private repo)
+export ADDE_DOCKERHUB_USERNAME=myuser
+export ADDE_DOCKERHUB_PASSWORD=mytoken
+# then: pull_image("myuser/private-image:tag")
+
+# ECR (use full image ref)
+# export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_REGION=us-east-1
+# then: pull_image("123456789.dkr.ecr.us-east-1.amazonaws.com/myimage:tag")
+
+# Or pre-fetched ECR token (e.g. from CI)
+# export ADDE_ECR_TOKEN=$(aws ecr get-login-password --region us-east-1)
+# export ADDE_ECR_REGISTRY=123456789.dkr.ecr.us-east-1.amazonaws.com
+```
 
 ### 2. Install the Python client
 
