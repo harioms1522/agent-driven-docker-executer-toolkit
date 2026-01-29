@@ -13,6 +13,7 @@ Go toolset + Python client for running agent-generated code in isolated Docker c
 | **cleanup_env** | `container_id`; stop + remove |
 | **prepare_build_context** | `files{name: content}`, optional `context_id`; stages files, auto `.dockerignore`, injects Dockerfile if requirements.txt/package.json present |
 | **build_image_from_context** | `context_id`, `tag`, optional `build_args{}`; runs `docker build`; tag convention `agent-env:{task_id}-{timestamp}`; security check on Dockerfile |
+| **build_image_from_path** | `path`, `tag`, optional `build_args{}`; build from an **existing directory** (e.g. cloned repo) that contains a Dockerfile; same security and handshake |
 | **list_agent_images** | optional `filter_tag`; returns custom images (agent-env:...) for reuse |
 | **prune_build_cache** | optional `older_than_hrs`; cleans build cache |
 | Security | Network disabled by default; memory/CPU capped; code injected via Docker API, not shell; Dockerfile forbidden patterns (e.g. docker.sock mount) |
@@ -136,6 +137,7 @@ adde get_container_logs '{"container_id":"<id>","tail_lines":0}'
 adde cleanup_env '{"container_id":"<id>"}'
 adde prepare_build_context '{"files":{"requirements.txt":"requests","main.py":"print(1)"}}'
 adde build_image_from_context '{"context_id":"/path/from/prepare","tag":"agent-env:task-1"}'
+adde build_image_from_path '{"path":"/path/to/cloned/repo","tag":"agent-env:myapp-1"}'
 adde list_agent_images '{"filter_tag":"agent-env"}'
 adde prune_build_cache '{"older_than_hrs":24}'
 ```

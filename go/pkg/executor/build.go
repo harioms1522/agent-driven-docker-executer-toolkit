@@ -25,39 +25,53 @@ var forbiddenDockerfilePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)privileged\s*true`),
 }
 
-// BuildImageFromContext runs docker build from the context directory.
+// BuildImageFromContext runs docker build from the context directory (e.g. path from prepare_build_context).
 // Validates Dockerfile for forbidden commands, then builds and returns the handshake result.
 func BuildImageFromContext(ctx context.Context, cli *client.Client, p BuildImageFromContextParams) BuildImageFromContextResult {
 	if p.ContextID == "" {
 		return BuildImageFromContextResult{Status: "error", Error: "context_id is required"}
 	}
-	absDir := filepath.Clean(p.ContextID)
+	return buildImageFromDir(ctx, cli, filepath.Clean(p.ContextID), p.Tag, p.BuildArgs, "context_id")
+}
+
+// BuildImageFromPath runs docker build from an existing directory on disk (e.g. a cloned repo).
+// The directory must contain a Dockerfile. Same security checks and handshake result as BuildImageFromContext.
+func BuildImageFromPath(ctx context.Context, cli *client.Client, p BuildImageFromPathParams) BuildImageFromContextResult {
+	if p.Path == "" {
+		return BuildImageFromContextResult{Status: "error", Error: "path is required"}
+	}
+	absDir, err := filepath.Abs(filepath.Clean(p.Path))
+	if err != nil {
+		return BuildImageFromContextResult{Status: "error", Error: fmt.Sprintf("path invalid: %v", err)}
+	}
+	return buildImageFromDir(ctx, cli, absDir, p.Tag, p.BuildArgs, "path")
+}
+
+// buildImageFromDir is the shared build logic: validate Dockerfile, tar dir, run ImageBuild, return handshake.
+func buildImageFromDir(ctx context.Context, cli *client.Client, absDir, tag string, buildArgs map[string]string, paramName string) BuildImageFromContextResult {
 	info, err := os.Stat(absDir)
 	if err != nil || !info.IsDir() {
-		return BuildImageFromContextResult{Status: "error", Error: fmt.Sprintf("context_id is not a valid directory: %v", err)}
+		return BuildImageFromContextResult{Status: "error", Error: fmt.Sprintf("%s is not a valid directory: %v", paramName, err)}
 	}
 
-	// Security: validate Dockerfile
 	dockerfilePath := filepath.Join(absDir, "Dockerfile")
 	dfContent, err := os.ReadFile(dockerfilePath)
 	if err != nil {
-		return BuildImageFromContextResult{Status: "error", Error: fmt.Sprintf("Dockerfile not found or unreadable: %v", err)}
+		return BuildImageFromContextResult{Status: "error", Error: fmt.Sprintf("Dockerfile not found or unreadable in %s: %v", paramName, err)}
 	}
 	if err := validateDockerfile(string(dfContent)); err != nil {
 		return BuildImageFromContextResult{Status: "error", Error: err.Error()}
 	}
 
-	// Build tar context from directory
 	tarBuf, err := tarContextFromDir(absDir)
 	if err != nil {
 		return BuildImageFromContextResult{Status: "error", Error: fmt.Sprintf("failed to create build context: %v", err)}
 	}
 
-	tag := strings.TrimSpace(p.Tag)
+	tag = strings.TrimSpace(tag)
 	if tag == "" {
 		tag = "agent-env:build-" + fmt.Sprintf("%d", time.Now().Unix())
 	}
-	// Enforce tagging convention: agent-env:...
 	if !strings.HasPrefix(tag, "agent-env:") {
 		tag = "agent-env:" + tag
 	}
@@ -67,9 +81,9 @@ func BuildImageFromContext(ctx context.Context, cli *client.Client, p BuildImage
 		Dockerfile: "Dockerfile",
 		Remove:     true,
 	}
-	if len(p.BuildArgs) > 0 {
+	if len(buildArgs) > 0 {
 		buildOpts.BuildArgs = make(map[string]*string)
-		for k, v := range p.BuildArgs {
+		for k, v := range buildArgs {
 			s := v
 			buildOpts.BuildArgs[k] = &s
 		}
@@ -84,7 +98,6 @@ func BuildImageFromContext(ctx context.Context, cli *client.Client, p BuildImage
 	}
 	defer resp.Body.Close()
 
-	// Consume build output and parse for errors/summary
 	summary, failedLayer, buildErr := parseBuildOutput(resp.Body)
 	if buildErr != nil {
 		return BuildImageFromContextResult{
@@ -95,7 +108,6 @@ func BuildImageFromContext(ctx context.Context, cli *client.Client, p BuildImage
 		}
 	}
 
-	// Inspect image for ID and size
 	imageID, sizeMB := getImageInfo(buildCtx, cli, tag)
 	return BuildImageFromContextResult{
 		Status:          "success",

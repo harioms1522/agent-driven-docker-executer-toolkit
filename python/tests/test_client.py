@@ -16,6 +16,7 @@ from adde.client import (
     _call,
     _find_adde,
     build_image_from_context,
+    build_image_from_path,
     cleanup_env,
     create_runtime_env,
     execute_code_block,
@@ -165,6 +166,24 @@ def test_build_image_from_context_params(mock_subprocess_run):
     assert call_args["context_id"] == "/tmp/ctx"
     assert call_args["tag"] == "agent-env:task-1"
     assert call_args["build_args"] == {"FOO": "bar"}
+
+
+def test_build_image_from_path_params(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"status":"success","image_id":"sha256:xyz","tag":"agent-env:myapp-1","size_mb":80}',
+        stderr="",
+    )
+    build_image_from_path(
+        path="/home/user/myproject",
+        tag="agent-env:myapp-1",
+        build_args={"VERSION": "1.0"},
+        bin_path="/fake/adde",
+    )
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["path"] == "/home/user/myproject"
+    assert call_args["tag"] == "agent-env:myapp-1"
+    assert call_args["build_args"] == {"VERSION": "1.0"}
 
 
 def test_list_agent_images_params(mock_subprocess_run):

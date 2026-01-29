@@ -164,6 +164,32 @@ def build_image_from_context(
     )
 
 
+def build_image_from_path(
+    path: str,
+    tag: str,
+    build_args: Optional[dict[str, str]] = None,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Builds a Docker image from an existing directory on disk (e.g. a cloned repo).
+    The directory must contain a Dockerfile. Same security checks and handshake as
+    build_image_from_context. Use this when you already have a project directory
+    with a proper Dockerfile; use prepare_build_context + build_image_from_context
+    when you have in-memory files only.
+
+    path: absolute or relative path to the project directory
+    tag: e.g. agent-env:myapp-1 (agent-env: prefix is added if missing)
+
+    Returns: { status, image_id, tag, size_mb, build_log_summary } or error.
+    """
+    params: dict[str, Any] = {"path": path, "tag": tag}
+    if build_args:
+        params["build_args"] = build_args
+    return _call(
+        "build_image_from_path", params, bin_path=bin_path, timeout=600
+    )
+
+
 def list_agent_images(
     filter_tag: Optional[str] = None,
     bin_path: Optional[str] = None,

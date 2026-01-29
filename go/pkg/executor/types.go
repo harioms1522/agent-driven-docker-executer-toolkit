@@ -92,6 +92,14 @@ type BuildImageFromContextParams struct {
 	BuildArgs map[string]string `json:"build_args,omitempty"`
 }
 
+// BuildImageFromPathParams defines parameters for build_image_from_path.
+// Use when the project already exists on disk (e.g. cloned repo) with a Dockerfile.
+type BuildImageFromPathParams struct {
+	Path      string            `json:"path"`       // absolute or relative path to directory containing Dockerfile
+	Tag       string            `json:"tag"`        // e.g. agent-env:myapp-1
+	BuildArgs map[string]string `json:"build_args,omitempty"`
+}
+
 // BuildImageFromContextResult is the return value of build_image_from_context (handshake format).
 type BuildImageFromContextResult struct {
 	Status          string  `json:"status,omitempty"`           // "success" or "error"
