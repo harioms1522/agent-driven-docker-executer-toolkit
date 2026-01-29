@@ -7,12 +7,18 @@ Go toolset + Python client for running agent-generated code in isolated Docker c
 | Requirement | Implementation |
 |-------------|-----------------|
 | **pull_image** | `image`; pulls from default registry so `create_runtime_env` can use it |
-| **create_runtime_env** | `image`, `dependencies[]`, `env_vars{}`; workspace mount at `/workspace`; 512MB / 0.5 CPU; `--network none` unless `network: true` |
+| **create_runtime_env** | `image`, `dependencies[]`, `env_vars{}`; workspace at `/workspace`; 512MB / 0.5 CPU; `--network none` unless `network: true`; optional `port_bindings` (e.g. `{"3000": "8080"}`); optional `use_image_cmd: true` to run the image CMD (e.g. server) instead of `sleep 86400` |
 | **execute_code_block** | `container_id`, `filename`, `code_content`; file via **put_archive** (no shell on code); hard **timeout** (default 30s) |
 | **get_container_logs** | `container_id`, `tail_lines`; returns `{ exit_code, stdout, stderr, execution_time }` (§3.B) |
 | **cleanup_env** | `container_id`; stop + remove |
-| Security | Network disabled by default; memory/CPU capped; code injected via Docker API, not shell |
-| Observability | Logs captured via exec attach + stdcopy; persisted for `get_container_logs` |
+| **prepare_build_context** | `files{name: content}`, optional `context_id`; stages files, auto `.dockerignore`, injects Dockerfile if requirements.txt/package.json present |
+| **build_image_from_context** | `context_id`, `tag`, optional `build_args{}`; runs `docker build`; tag convention `agent-env:{task_id}-{timestamp}`; security check on Dockerfile |
+| **build_image_from_path** | `path`, `tag`, optional `build_args{}`; build from an **existing directory** (e.g. cloned repo) that contains a Dockerfile; same security and handshake |
+| **list_agent_images** | optional `filter_tag`; returns custom images (agent-env:...) for reuse |
+| **prune_build_cache** | optional `older_than_hrs`; cleans build cache |
+| **delete_image** | `image` (tag or ID), optional `force`, optional `agent_env_only`; when `agent_env_only` is true, only tags starting with `agent-env:` are allowed (Python wrapper always enforces this) |
+| Security | Network disabled by default; memory/CPU capped; code injected via Docker API, not shell; Dockerfile forbidden patterns (e.g. docker.sock mount) |
+| Observability | Logs captured via exec attach + stdcopy; persisted for `get_container_logs`; build returns `build_log_summary` and `failed_layer` on error |
 
 ## Layout
 
@@ -48,6 +54,8 @@ Or add the path to `adde` (or `adde.exe`) to `PATH`, or set `ADDE_BIN=/path/to/a
 
 ### 3. Use from Python (e.g. in an agent)
 
+**Option A: Pre-built image (existing flow)**
+
 ```python
 from adde import pull_image, create_runtime_env, execute_code_block, get_container_logs, cleanup_env
 
@@ -78,6 +86,46 @@ logs = get_container_logs(cid, tail_lines=50)
 cleanup_env(cid)
 ```
 
+**Option B: Image Factory (build custom image, then run)**
+
+```python
+from adde import (
+    prepare_build_context,
+    build_image_from_context,
+    create_runtime_env,
+    execute_code_block,
+    get_container_logs,
+    cleanup_env,
+    list_agent_images,
+)
+
+# 1) Stage codebase (no Dockerfile → tool injects Python template)
+ctx = prepare_build_context({
+    "requirements.txt": "requests\n",
+    "main.py": "import requests\nprint(requests.get('https://httpbin.org/get').status_code)\n",
+})
+context_path = ctx["context_id"]
+
+# 2) Build image (tag: agent-env:task-123-1706457600)
+import time
+tag = f"agent-env:task-{int(time.time())}"
+out = build_image_from_context(context_path, tag)
+if out.get("status") != "success":
+    raise RuntimeError(out.get("error", out))
+image_id = out["image_id"]  # or use tag for create_runtime_env
+
+# 3) Create env from built image (use tag; create_runtime_env accepts image name or ID)
+r = create_runtime_env(image=tag, dependencies=[], env_vars={}, network=True)
+cid = r["container_id"]
+
+# 4) Run code, get logs, cleanup (same as Option A)
+# execute_code_block(cid, ...); get_container_logs(cid); cleanup_env(cid)
+
+# List / prune agent images
+list_agent_images(filter_tag="agent-env")
+# prune_build_cache(older_than_hrs=24)
+```
+
 ## CLI usage
 
 JSON can be passed as the second argument or via **stdin** (omit the second arg and pipe):
@@ -88,6 +136,14 @@ adde create_runtime_env '{"image":"python:3.11-slim","dependencies":[],"env_vars
 adde execute_code_block '{"container_id":"<id>","filename":"main.py","code_content":"print(1)"}'
 adde get_container_logs '{"container_id":"<id>","tail_lines":0}'
 adde cleanup_env '{"container_id":"<id>"}'
+adde prepare_build_context '{"files":{"requirements.txt":"requests","main.py":"print(1)"}}'
+adde build_image_from_context '{"context_id":"/path/from/prepare","tag":"agent-env:task-1"}'
+adde build_image_from_path '{"path":"/path/to/cloned/repo","tag":"agent-env:myapp-1"}'
+adde list_agent_images '{"filter_tag":"agent-env"}'
+adde prune_build_cache '{"older_than_hrs":24}'
+adde delete_image '{"image":"agent-env:task-1","force":false}'
+# Optional: restrict to agent-env tags when using CLI (Python wrapper always enforces this)
+adde delete_image '{"image":"agent-env:task-1","force":false,"agent_env_only":true}'
 ```
 
 **PowerShell on Windows:** passing JSON as an argument often breaks quoting. Use **stdin** instead:
@@ -98,6 +154,13 @@ adde cleanup_env '{"container_id":"<id>"}'
 '{"container_id":"<id>","filename":"t.sh","code_content":"echo 42","timeout_sec":15}' | .\adde.exe execute_code_block
 '{"container_id":"<id>","tail_lines":10}' | .\adde.exe get_container_logs
 '{"container_id":"<id>"}' | .\adde.exe cleanup_env
+'{"files":{"requirements.txt":"requests","main.py":"print(1)"}}' | .\adde.exe prepare_build_context
+'{"context_id":"/path/from/prepare","tag":"agent-env:task-1"}' | .\adde.exe build_image_from_context
+'{"path":"/path/to/cloned/repo","tag":"agent-env:myapp-1"}' | .\adde.exe build_image_from_path
+'{"filter_tag":"agent-env"}' | .\adde.exe list_agent_images
+'{"older_than_hrs":24}' | .\adde.exe prune_build_cache
+'{"image":"agent-env:task-1","force":false}' | .\adde.exe delete_image
+'{"image":"agent-env:task-1","force":false,"agent_env_only":true}' | .\adde.exe delete_image
 ```
 
 ## Flow (per spec §5)

@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
 
 // CreateRuntimeEnv provisions a container with workspace mount, resource limits, and optional network.
@@ -34,8 +36,14 @@ func CreateRuntimeEnv(ctx context.Context, cli *client.Client, p CreateRuntimeEn
 	cfg := &container.Config{
 		Image: p.Image,
 		Env:   envSlice,
-		Cmd:   []string{"sleep", "86400"}, // keep alive; agent runs via exec
-		WorkingDir: WorkspacePathInsideContainer,
+	}
+	if p.UseImageCmd {
+		// Run the image's default CMD (e.g. node server.js); use image's working dir so server starts correctly
+		// Port bindings and /workspace mount still apply; agent can exec into /workspace later if needed
+	} else {
+		// Default: keep alive with sleep so agent runs code via exec
+		cfg.Cmd = []string{"sleep", "86400"}
+		cfg.WorkingDir = WorkspacePathInsideContainer
 	}
 	hostCfg := &container.HostConfig{
 		Binds:       []string{absWorkspace + ":" + WorkspacePathInsideContainer},
@@ -45,6 +53,30 @@ func CreateRuntimeEnv(ctx context.Context, cli *client.Client, p CreateRuntimeEn
 			NanoCPUs: DefaultNanoCPUs,
 		},
 		AutoRemove: false,
+	}
+
+	// Port bindings: container_port -> host_port (e.g. "3000" -> "8080"); bind to 127.0.0.1
+	if len(p.PortBindings) > 0 {
+		exposed := make(map[nat.Port]struct{})
+		portMap := make(map[nat.Port][]nat.PortBinding)
+		for cPort, hPort := range p.PortBindings {
+			cPort = strings.TrimSpace(cPort)
+			hPort = strings.TrimSpace(hPort)
+			if cPort == "" || hPort == "" {
+				continue
+			}
+			if _, err := strconv.Atoi(hPort); err != nil {
+				continue
+			}
+			portKey := nat.Port(cPort)
+			if !strings.Contains(cPort, "/") {
+				portKey = nat.Port(cPort + "/tcp")
+			}
+			exposed[portKey] = struct{}{}
+			portMap[portKey] = []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: hPort}}
+		}
+		cfg.ExposedPorts = exposed
+		hostCfg.PortBindings = portMap
 	}
 
 	resp, err := cli.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "")

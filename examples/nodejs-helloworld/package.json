@@ -1,0 +1,6 @@
+{
+  "name": "nodejs-helloworld",
+  "version": "1.0.0",
+  "description": "Simple Node.js server that prints Hello World on the main path",
+  "main": "server.js"
+}

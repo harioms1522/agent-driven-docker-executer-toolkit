@@ -15,10 +15,16 @@ import pytest
 from adde.client import (
     _call,
     _find_adde,
+    build_image_from_context,
+    build_image_from_path,
     cleanup_env,
     create_runtime_env,
+    delete_image,
     execute_code_block,
     get_container_logs,
+    list_agent_images,
+    prepare_build_context,
+    prune_build_cache,
     pull_image,
 )
 
@@ -97,6 +103,23 @@ def test_create_runtime_env_params(mock_subprocess_run):
     assert call_args["network"] is True
 
 
+def test_create_runtime_env_port_bindings(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"container_id":"abc","workspace":"/tmp/x"}',
+        stderr="",
+    )
+    create_runtime_env(
+        image="node:20-alpine",
+        port_bindings={"3000": "8080"},
+        network=True,
+        bin_path="/fake/adde",
+    )
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["port_bindings"] == {"3000": "8080"}
+    assert call_args["network"] is True
+
+
 def test_execute_code_block_params(mock_subprocess_run):
     mock_subprocess_run.return_value = MagicMock(
         returncode=0,
@@ -136,6 +159,114 @@ def test_cleanup_env_params(mock_subprocess_run):
     assert call_args == {"container_id": "cid"}
 
 
+def test_prepare_build_context_params(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0, stdout='{"context_id":"/tmp/adde-build-xyz"}', stderr=""
+    )
+    prepare_build_context(files={"main.py": "print(1)", "requirements.txt": "requests"}, bin_path="/fake/adde")
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["files"] == {"main.py": "print(1)", "requirements.txt": "requests"}
+
+
+def test_build_image_from_context_params(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"status":"success","image_id":"sha256:abc","tag":"agent-env:v1","size_mb":100}',
+        stderr="",
+    )
+    build_image_from_context(
+        context_id="/tmp/ctx",
+        tag="agent-env:task-1",
+        build_args={"FOO": "bar"},
+        bin_path="/fake/adde",
+    )
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["context_id"] == "/tmp/ctx"
+    assert call_args["tag"] == "agent-env:task-1"
+    assert call_args["build_args"] == {"FOO": "bar"}
+
+
+def test_build_image_from_path_params(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"status":"success","image_id":"sha256:xyz","tag":"agent-env:myapp-1","size_mb":80}',
+        stderr="",
+    )
+    build_image_from_path(
+        path="/home/user/myproject",
+        tag="agent-env:myapp-1",
+        build_args={"VERSION": "1.0"},
+        bin_path="/fake/adde",
+    )
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["path"] == "/home/user/myproject"
+    assert call_args["tag"] == "agent-env:myapp-1"
+    assert call_args["build_args"] == {"VERSION": "1.0"}
+
+
+def test_list_agent_images_params(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0, stdout='{"images":[{"id":"sha256:x","tags":["agent-env:v1"],"size_mb":50}]}', stderr=""
+    )
+    list_agent_images(filter_tag="agent-env", bin_path="/fake/adde")
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["filter_tag"] == "agent-env"
+
+
+def test_prune_build_cache_params(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0, stdout='{"space_reclaimed_mb":1024}', stderr=""
+    )
+    prune_build_cache(older_than_hrs=24, bin_path="/fake/adde")
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["older_than_hrs"] == 24
+
+
+def test_delete_image_params(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"ok":true,"deleted":["Untagged: agent-env:task-1"]}',
+        stderr="",
+    )
+    delete_image("agent-env:task-1", bin_path="/fake/adde")
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["image"] == "agent-env:task-1"
+    assert "force" not in call_args or call_args.get("force") is False
+
+
+def test_delete_image_force_params(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"ok":true,"deleted":["Deleted: sha256:abc123"]}',
+        stderr="",
+    )
+    delete_image("agent-env:myapp-1", force=True, bin_path="/fake/adde")
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["image"] == "agent-env:myapp-1"
+    assert call_args["force"] is True
+
+
+def test_delete_image_returns_ok_and_deleted(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"ok":true,"deleted":["Untagged: agent-env:x","Deleted: sha256:abc"]}',
+        stderr="",
+    )
+    out = delete_image("agent-env:x", bin_path="/fake/adde")
+    assert out["ok"] is True
+    assert out["deleted"] == ["Untagged: agent-env:x", "Deleted: sha256:abc"]
+
+
+def test_delete_image_raises_on_error(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=1,
+        stdout="",
+        stderr="adde: no such image",
+    )
+    with pytest.raises(RuntimeError, match="no such image|adde delete_image failed"):
+        delete_image("nonexistent:tag", bin_path="/fake/adde")
+
+
 # ---- Integration tests (real adde binary, optional) ----
 
 
@@ -159,11 +290,12 @@ def adde_bin():
 
 @pytest.mark.skipif(_adde_bin() is None, reason="adde binary not found (build go/ or set ADDE_BIN)")
 def test_integration_pull_image_empty_image_returns_error(adde_bin):
-    """pull_image with empty image returns success exit but result contains error (CLI does not exit 1)."""
+    """pull_image with empty image causes CLI to exit 1; client raises RuntimeError with server error."""
     from adde.client import _call
-    r = _call("pull_image", {"image": ""}, bin_path=adde_bin)
-    assert "error" in r and r["error"]
-    assert r.get("ok") is not True
+    with pytest.raises(RuntimeError) as exc_info:
+        _call("pull_image", {"image": ""}, bin_path=adde_bin)
+    msg = str(exc_info.value)
+    assert "error" in msg.lower() and "image name is required" in msg.lower()
 
 
 @pytest.mark.skipif(_adde_bin() is None, reason="adde binary not found (build go/ or set ADDE_BIN)")
@@ -223,3 +355,20 @@ def test_integration_e2e_busybox_when_docker_up(adde_bin):
             assert "42" in logs["log"].get("stdout", "")
     finally:
         cleanup_env(cid, bin_path=adde_bin)
+
+
+@pytest.mark.skipif(_adde_bin() is None, reason="adde binary not found (build go/ or set ADDE_BIN)")
+def test_integration_delete_image_nonexistent_returns_error(adde_bin):
+    """delete_image with a non-existent image causes CLI to exit 1; client raises RuntimeError."""
+    with pytest.raises(RuntimeError) as exc_info:
+        delete_image("agent-env:this-tag-does-not-exist-12345", bin_path=adde_bin)
+    msg = str(exc_info.value)
+    assert "error" in msg.lower() or "no such" in msg.lower() or "not found" in msg.lower()
+
+
+def test_delete_image_non_agent_env_raises_value_error():
+    """delete_image with a non-agent-env tag (e.g. busybox) is rejected by Python wrapper; raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        delete_image("busybox", bin_path="/fake/adde")
+    msg = str(exc_info.value)
+    assert "agent-env" in msg.lower() or "only agent" in msg.lower()

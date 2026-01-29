@@ -1,4 +1,5 @@
-cmd/
+# ignore root-level cmd/ if present; keep go/cmd for adde CLI
+/cmd/
 docker/
 .env
 .env.local

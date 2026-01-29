@@ -55,6 +55,10 @@ from adde import (
     execute_code_block,
     get_container_logs,
     cleanup_env,
+    prepare_build_context,
+    build_image_from_context,
+    list_agent_images,
+    prune_build_cache,
 )
 
 # Optional: set this if the binary is not on PATH
@@ -110,12 +114,54 @@ def adde_cleanup_env(container_id: str) -> str:
         return f"Error: {r['error']}"
     return "OK"
 
+@tool
+def adde_prepare_build_context(files_json: str) -> str:
+    """Stage files (JSON object: path -> content) for Docker build. Returns context_id (path). Auto-adds .dockerignore; injects Dockerfile if requirements.txt/package.json present but no Dockerfile."""
+    import json
+    files = json.loads(files_json)
+    r = prepare_build_context(files=files)
+    if r.get("error"):
+        return f"Error: {r['error']}"
+    return r["context_id"]
+
+@tool
+def adde_build_image_from_context(context_id: str, tag: str, build_args_json: str = "{}") -> str:
+    """Build Docker image from context (path from prepare_build_context). Tag should be agent-env:task-<id>-<ts>. Returns JSON with status, image_id, tag, size_mb, build_log_summary or error."""
+    import json
+    build_args = json.loads(build_args_json) if build_args_json else {}
+    r = build_image_from_context(context_id=context_id, tag=tag, build_args=build_args or None)
+    if r.get("status") == "success":
+        return f"status=success image_id={r.get('image_id')} tag={r.get('tag')} size_mb={r.get('size_mb')}"
+    return f"Error: {r.get('error', r.get('build_log_summary', r))}"
+
+@tool
+def adde_list_agent_images(filter_tag: str = "") -> str:
+    """List custom images tagged agent-env:... Optional filter_tag prefix."""
+    r = list_agent_images(filter_tag=filter_tag or None)
+    if r.get("error"):
+        return f"Error: {r['error']}"
+    if not r.get("images"):
+        return "No agent images found."
+    return "\n".join(f"{e['id']} {e['tags']} {e['size_mb']}MB" for e in r["images"])
+
+@tool
+def adde_prune_build_cache(older_than_hrs: int = 0) -> str:
+    """Clean build cache. older_than_hrs=0 means prune all unused; >0 means only cache older than N hours."""
+    r = prune_build_cache(older_than_hrs=older_than_hrs)
+    if r.get("error"):
+        return f"Error: {r['error']}"
+    return f"Space reclaimed: {r.get('space_reclaimed_mb', 0):.1f} MB"
+
 ADDE_TOOLS = [
     adde_pull_image,
     adde_create_runtime_env,
     adde_execute_code_block,
     adde_get_container_logs,
     adde_cleanup_env,
+    adde_prepare_build_context,
+    adde_build_image_from_context,
+    adde_list_agent_images,
+    adde_prune_build_cache,
 ]
 ```
 

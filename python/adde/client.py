@@ -38,14 +38,19 @@ def pull_image(
     return _call("pull_image", params, bin_path=bin_path)
 
 
-def _call(tool: str, params: dict, bin_path: Optional[str] = None) -> dict:
+def _call(
+    tool: str,
+    params: dict,
+    bin_path: Optional[str] = None,
+    timeout: int = 120,
+) -> dict:
     bin_ = bin_path or _find_adde()
     payload = json.dumps(params)
     out = subprocess.run(
         [bin_, tool, payload],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=timeout,
     )
     if out.returncode != 0:
         err = out.stderr.strip() or out.stdout.strip() or f"adde {tool} failed"
@@ -58,19 +63,32 @@ def create_runtime_env(
     dependencies: Optional[list[str]] = None,
     env_vars: Optional[dict[str, str]] = None,
     network: bool = False,
+    port_bindings: Optional[dict[str, str]] = None,
+    use_image_cmd: bool = False,
     bin_path: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Provisions a container with workspace at /workspace, 512MB / 0.5 CPU, network=none by default.
 
+    port_bindings: optional map container_port -> host_port (e.g. {"3000": "8080"}).
+    Ports are bound to 127.0.0.1 on the host.
+
+    use_image_cmd: if True, run the image's default CMD (e.g. node server.js) instead of
+    sleep 86400. Use this when the image runs a long-lived server; use False (default) for
+    exec-based workflows where you run code via execute_code_block.
+
     Returns dict with keys: container_id, workspace, or error.
     """
-    params = {
+    params: dict[str, Any] = {
         "image": image,
         "dependencies": dependencies or [],
         "env_vars": env_vars or {},
         "network": network,
     }
+    if port_bindings:
+        params["port_bindings"] = port_bindings
+    if use_image_cmd:
+        params["use_image_cmd"] = True
     return _call("create_runtime_env", params, bin_path=bin_path)
 
 
@@ -117,3 +135,125 @@ def cleanup_env(
     """Stops and removes the container."""
     params = {"container_id": container_id}
     return _call("cleanup_env", params, bin_path=bin_path)
+
+
+# ---- Image Builder & Factory ----
+
+
+def prepare_build_context(
+    files: dict[str, str],
+    context_id: Optional[str] = None,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Stages files (source code, configs, requirements) into a temporary directory for Docker build.
+    Auto-generates .dockerignore if missing; injects a standard Dockerfile if requirements.txt
+    or package.json exists but no Dockerfile is provided.
+
+    Returns dict with context_id (absolute path to build context dir), or error.
+    """
+    params: dict[str, Any] = {"files": files}
+    if context_id is not None:
+        params["context_id"] = context_id
+    return _call("prepare_build_context", params, bin_path=bin_path)
+
+
+def build_image_from_context(
+    context_id: str,
+    tag: str,
+    build_args: Optional[dict[str, str]] = None,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Runs docker build from the context directory (path from prepare_build_context).
+    Tag convention: agent-env:{task_id}-{timestamp}. Returns handshake:
+    { status, image_id, tag, size_mb, build_log_summary } or error/failed_layer.
+    """
+    params: dict[str, Any] = {"context_id": context_id, "tag": tag}
+    if build_args:
+        params["build_args"] = build_args
+    return _call(
+        "build_image_from_context", params, bin_path=bin_path, timeout=600
+    )
+
+
+def build_image_from_path(
+    path: str,
+    tag: str,
+    build_args: Optional[dict[str, str]] = None,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Builds a Docker image from an existing directory on disk (e.g. a cloned repo).
+    The directory must contain a Dockerfile. Same security checks and handshake as
+    build_image_from_context. Use this when you already have a project directory
+    with a proper Dockerfile; use prepare_build_context + build_image_from_context
+    when you have in-memory files only.
+
+    path: absolute or relative path to the project directory
+    tag: e.g. agent-env:myapp-1 (agent-env: prefix is added if missing)
+
+    Returns: { status, image_id, tag, size_mb, build_log_summary } or error.
+    """
+    params: dict[str, Any] = {"path": path, "tag": tag}
+    if build_args:
+        params["build_args"] = build_args
+    return _call(
+        "build_image_from_path", params, bin_path=bin_path, timeout=600
+    )
+
+
+def list_agent_images(
+    filter_tag: Optional[str] = None,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Returns a list of custom images created by the agent (tagged agent-env:...).
+    filter_tag: optional prefix filter (e.g. 'agent-env' or 'agent-env:task-123').
+    """
+    params: dict[str, Any] = {}
+    if filter_tag is not None:
+        params["filter_tag"] = filter_tag
+    return _call("list_agent_images", params, bin_path=bin_path)
+
+
+def prune_build_cache(
+    older_than_hrs: int = 0,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Cleans up intermediate build stages and unused build cache.
+    older_than_hrs: 0 = prune all unused; >0 = only prune cache older than that many hours.
+    Returns space_reclaimed_mb or error.
+    """
+    params: dict[str, Any] = {}
+    if older_than_hrs > 0:
+        params["older_than_hrs"] = older_than_hrs
+    return _call("prune_build_cache", params, bin_path=bin_path)
+
+
+def delete_image(
+    image: str,
+    force: bool = False,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Deletes a Docker image by tag. This wrapper enforces that only agent-created
+    images (tag must start with "agent-env:") can be deleted; other images are
+    rejected. Use list_agent_images to see allowed tags.
+
+    image: tag (e.g. agent-env:nodejs-helloworld-123).
+    force: if True, remove even when the image is in use (containers must be stopped first, or force untags/removes).
+
+    Returns dict with ok, deleted (list of "Deleted: ..." / "Untagged: ..." refs), or error.
+    """
+    img = image.strip()
+    if not img.startswith("agent-env:"):
+        raise ValueError(
+            'only agent-created images can be deleted (image must start with "agent-env:"); '
+            "use list_agent_images to see allowed tags"
+        )
+    params: dict[str, Any] = {"image": image, "agent_env_only": True}
+    if force:
+        params["force"] = True
+    return _call("delete_image", params, bin_path=bin_path)
