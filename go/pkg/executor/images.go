@@ -53,3 +53,29 @@ func ListAgentImages(ctx context.Context, cli *client.Client, p ListAgentImagesP
 	}
 	return ListAgentImagesResult{Images: out}
 }
+
+// DeleteImage removes a Docker image by tag or ID. When AgentEnvOnly is true, only tags with prefix "agent-env:" are allowed.
+func DeleteImage(ctx context.Context, cli *client.Client, p DeleteImageParams) DeleteImageResult {
+	img := strings.TrimSpace(p.Image)
+	if img == "" {
+		return DeleteImageResult{Error: "image is required"}
+	}
+	if p.AgentEnvOnly && !strings.HasPrefix(img, AgentImageTagPrefix) {
+		return DeleteImageResult{Error: "only agent-created images can be deleted (image must start with \"agent-env:\"); use list_agent_images to see allowed tags"}
+	}
+	opts := types.ImageRemoveOptions{Force: p.Force, PruneChildren: false}
+	deleted, err := cli.ImageRemove(ctx, img, opts)
+	if err != nil {
+		return DeleteImageResult{Error: err.Error()}
+	}
+	var refs []string
+	for _, d := range deleted {
+		if d.Deleted != "" {
+			refs = append(refs, "Deleted: "+d.Deleted)
+		}
+		if d.Untagged != "" {
+			refs = append(refs, "Untagged: "+d.Untagged)
+		}
+	}
+	return DeleteImageResult{OK: true, Deleted: refs}
+}

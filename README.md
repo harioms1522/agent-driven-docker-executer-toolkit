@@ -16,6 +16,7 @@ Go toolset + Python client for running agent-generated code in isolated Docker c
 | **build_image_from_path** | `path`, `tag`, optional `build_args{}`; build from an **existing directory** (e.g. cloned repo) that contains a Dockerfile; same security and handshake |
 | **list_agent_images** | optional `filter_tag`; returns custom images (agent-env:...) for reuse |
 | **prune_build_cache** | optional `older_than_hrs`; cleans build cache |
+| **delete_image** | `image` (tag or ID), optional `force`, optional `agent_env_only`; when `agent_env_only` is true, only tags starting with `agent-env:` are allowed (Python wrapper always enforces this) |
 | Security | Network disabled by default; memory/CPU capped; code injected via Docker API, not shell; Dockerfile forbidden patterns (e.g. docker.sock mount) |
 | Observability | Logs captured via exec attach + stdcopy; persisted for `get_container_logs`; build returns `build_log_summary` and `failed_layer` on error |
 
@@ -140,6 +141,9 @@ adde build_image_from_context '{"context_id":"/path/from/prepare","tag":"agent-e
 adde build_image_from_path '{"path":"/path/to/cloned/repo","tag":"agent-env:myapp-1"}'
 adde list_agent_images '{"filter_tag":"agent-env"}'
 adde prune_build_cache '{"older_than_hrs":24}'
+adde delete_image '{"image":"agent-env:task-1","force":false}'
+# Optional: restrict to agent-env tags when using CLI (Python wrapper always enforces this)
+adde delete_image '{"image":"agent-env:task-1","force":false,"agent_env_only":true}'
 ```
 
 **PowerShell on Windows:** passing JSON as an argument often breaks quoting. Use **stdin** instead:
@@ -150,6 +154,13 @@ adde prune_build_cache '{"older_than_hrs":24}'
 '{"container_id":"<id>","filename":"t.sh","code_content":"echo 42","timeout_sec":15}' | .\adde.exe execute_code_block
 '{"container_id":"<id>","tail_lines":10}' | .\adde.exe get_container_logs
 '{"container_id":"<id>"}' | .\adde.exe cleanup_env
+'{"files":{"requirements.txt":"requests","main.py":"print(1)"}}' | .\adde.exe prepare_build_context
+'{"context_id":"/path/from/prepare","tag":"agent-env:task-1"}' | .\adde.exe build_image_from_context
+'{"path":"/path/to/cloned/repo","tag":"agent-env:myapp-1"}' | .\adde.exe build_image_from_path
+'{"filter_tag":"agent-env"}' | .\adde.exe list_agent_images
+'{"older_than_hrs":24}' | .\adde.exe prune_build_cache
+'{"image":"agent-env:task-1","force":false}' | .\adde.exe delete_image
+'{"image":"agent-env:task-1","force":false,"agent_env_only":true}' | .\adde.exe delete_image
 ```
 
 ## Flow (per spec §5)

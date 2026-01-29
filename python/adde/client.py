@@ -230,3 +230,30 @@ def prune_build_cache(
     if older_than_hrs > 0:
         params["older_than_hrs"] = older_than_hrs
     return _call("prune_build_cache", params, bin_path=bin_path)
+
+
+def delete_image(
+    image: str,
+    force: bool = False,
+    bin_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Deletes a Docker image by tag. This wrapper enforces that only agent-created
+    images (tag must start with "agent-env:") can be deleted; other images are
+    rejected. Use list_agent_images to see allowed tags.
+
+    image: tag (e.g. agent-env:nodejs-helloworld-123).
+    force: if True, remove even when the image is in use (containers must be stopped first, or force untags/removes).
+
+    Returns dict with ok, deleted (list of "Deleted: ..." / "Untagged: ..." refs), or error.
+    """
+    img = image.strip()
+    if not img.startswith("agent-env:"):
+        raise ValueError(
+            'only agent-created images can be deleted (image must start with "agent-env:"); '
+            "use list_agent_images to see allowed tags"
+        )
+    params: dict[str, Any] = {"image": image, "agent_env_only": True}
+    if force:
+        params["force"] = True
+    return _call("delete_image", params, bin_path=bin_path)

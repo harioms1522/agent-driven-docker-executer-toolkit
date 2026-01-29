@@ -142,3 +142,17 @@ type PruneBuildCacheResult struct {
 	SpaceReclaimedMB float64 `json:"space_reclaimed_mb,omitempty"`
 	Error            string  `json:"error,omitempty"`
 }
+
+// DeleteImageParams defines parameters for delete_image.
+type DeleteImageParams struct {
+	Image        string `json:"image"`                   // tag (e.g. agent-env:task-1) or image ID
+	Force        bool   `json:"force,omitempty"`         // force remove even if in use (untag/remove)
+	AgentEnvOnly bool   `json:"agent_env_only,omitempty"` // when true, only allow deletion of tags starting with agent-env:
+}
+
+// DeleteImageResult is the return value of delete_image.
+type DeleteImageResult struct {
+	OK     bool     `json:"ok"`
+	Deleted []string `json:"deleted,omitempty"` // refs removed (e.g. tag or "Deleted: sha256:...")
+	Error  string   `json:"error,omitempty"`
+}

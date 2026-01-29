@@ -16,7 +16,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "usage: adde <tool> [json_payload]\n")
-		fmt.Fprintf(os.Stderr, "  tool: pull_image | create_runtime_env | execute_code_block | get_container_logs | cleanup_env | prepare_build_context | build_image_from_context | build_image_from_path | list_agent_images | prune_build_cache\n")
+		fmt.Fprintf(os.Stderr, "  tool: pull_image | create_runtime_env | execute_code_block | get_container_logs | cleanup_env | prepare_build_context | build_image_from_context | build_image_from_path | list_agent_images | prune_build_cache | delete_image\n")
 		fmt.Fprintf(os.Stderr, "  json_payload: JSON object for the tool, or omit to read from stdin\n")
 		os.Exit(2)
 	}
@@ -157,6 +157,17 @@ func main() {
 			return
 		}
 		result := executor.PruneBuildCache(ctx, cli, p)
+		outJSON(result)
+		if result.Error != "" {
+			os.Exit(1)
+		}
+	case "delete_image":
+		var p executor.DeleteImageParams
+		if err := json.Unmarshal([]byte(payload), &p); err != nil {
+			outErr(err)
+			return
+		}
+		result := executor.DeleteImage(ctx, cli, p)
 		outJSON(result)
 		if result.Error != "" {
 			os.Exit(1)

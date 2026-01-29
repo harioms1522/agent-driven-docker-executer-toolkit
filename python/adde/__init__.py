@@ -12,6 +12,7 @@ Python client for the ADDE Go CLI. Use from agent code to:
 - build_image_from_path: build from an existing directory (e.g. cloned repo) that has a Dockerfile
 - list_agent_images: list custom images (agent-env:...)
 - prune_build_cache: clean up build cache
+- delete_image: remove a Docker image by tag or ID
 """
 
 from .client import (
@@ -19,6 +20,7 @@ from .client import (
     build_image_from_path,
     cleanup_env,
     create_runtime_env,
+    delete_image,
     execute_code_block,
     get_container_logs,
     list_agent_images,
@@ -32,6 +34,7 @@ __all__ = [
     "build_image_from_path",
     "cleanup_env",
     "create_runtime_env",
+    "delete_image",
     "execute_code_block",
     "get_container_logs",
     "list_agent_images",
