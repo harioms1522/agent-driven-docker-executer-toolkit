@@ -63,19 +63,32 @@ def create_runtime_env(
     dependencies: Optional[list[str]] = None,
     env_vars: Optional[dict[str, str]] = None,
     network: bool = False,
+    port_bindings: Optional[dict[str, str]] = None,
+    use_image_cmd: bool = False,
     bin_path: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Provisions a container with workspace at /workspace, 512MB / 0.5 CPU, network=none by default.
 
+    port_bindings: optional map container_port -> host_port (e.g. {"3000": "8080"}).
+    Ports are bound to 127.0.0.1 on the host.
+
+    use_image_cmd: if True, run the image's default CMD (e.g. node server.js) instead of
+    sleep 86400. Use this when the image runs a long-lived server; use False (default) for
+    exec-based workflows where you run code via execute_code_block.
+
     Returns dict with keys: container_id, workspace, or error.
     """
-    params = {
+    params: dict[str, Any] = {
         "image": image,
         "dependencies": dependencies or [],
         "env_vars": env_vars or {},
         "network": network,
     }
+    if port_bindings:
+        params["port_bindings"] = port_bindings
+    if use_image_cmd:
+        params["use_image_cmd"] = True
     return _call("create_runtime_env", params, bin_path=bin_path)
 
 

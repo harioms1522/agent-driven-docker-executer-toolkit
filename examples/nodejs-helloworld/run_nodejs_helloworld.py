@@ -2,9 +2,10 @@
 """
 Node.js Hello World example using ADDE build_image_from_path.
 
-Builds the image from this directory (which has a Dockerfile and server.js),
-creates a container, starts the server and hits GET / inside the container
-to verify "Hello World", then cleans up. Requires Docker and the adde binary.
+Builds the image from this directory (Dockerfile + server.js), creates a container
+with port forwarding (container 3000 -> host 8080), starts the server in the
+container, and keeps it running so you can hit http://127.0.0.1:8080/ from your
+browser. Press Enter to stop the container and exit.
 """
 
 import sys
@@ -19,9 +20,12 @@ sys.path.insert(0, str(_repo_root / "python"))
 from adde import (
     build_image_from_path,
     create_runtime_env,
-    execute_code_block,
     cleanup_env,
 )
+
+# Container listens on 3000; we forward it to this host port
+CONTAINER_PORT = "3000"
+HOST_PORT = "8080"
 
 
 def main() -> None:
@@ -33,7 +37,7 @@ def main() -> None:
     bin_path = str(adde_bin) if adde_bin.is_file() else None
 
     project_path = str(_example_dir)
-    print(f"1. Building image from path: {project_path}")
+    print("1. Building image from path:", project_path)
     tag = f"agent-env:nodejs-helloworld-{int(time.time())}"
     out = build_image_from_path(
         path=project_path,
@@ -45,12 +49,14 @@ def main() -> None:
         sys.exit(1)
     print(f"   Image: {out.get('tag')} ({out.get('size_mb', 0):.1f} MB)")
 
-    print("2. Creating container from built image...")
+    print("2. Creating container with port forwarding (container 3000 -> host 8080)...")
     r = create_runtime_env(
         image=tag,
         dependencies=[],
         env_vars={},
         network=True,
+        port_bindings={CONTAINER_PORT: HOST_PORT},
+        use_image_cmd=True,  # run image CMD (node server.js) so the server starts
         bin_path=bin_path,
     )
     if r.get("error"):
@@ -60,31 +66,15 @@ def main() -> None:
     print(f"   Container: {container_id[:12]}...")
 
     try:
-        print("3. Starting server and requesting GET / inside container...")
-        # Server in /app (from Dockerfile). Start in background, then hit with Node (node:alpine has no wget)
-        run_script = (
-            "node /app/server.js & sleep 2 && node -e "
-            "\"require('http').get('http://localhost:3000/', r => { let d=''; "
-            "r.on('data', c=>d+=c); r.on('end', ()=>console.log(d)); });\""
-        )
-        exec_out = execute_code_block(
-            container_id=container_id,
-            filename="run.sh",
-            code_content=run_script,
-            timeout_sec=15,
-            bin_path=bin_path,
-        )
-        if exec_out.get("error"):
-            print("Error:", exec_out["error"], file=sys.stderr)
-        else:
-            log = exec_out.get("log", {})
-            stdout = (log.get("stdout") or "").strip()
-            print(f"   Response: {stdout or '(empty)'}")
-            if log.get("stderr"):
-                print(f"   stderr: {log.get('stderr', '')[:200]}")
+        print("3. Server started (container runs image CMD: node server.js).")
+        print()
+        print(f"   Server is running at  http://127.0.0.1:{HOST_PORT}/")
+        print("   Open in browser or run: curl http://127.0.0.1:8080/")
+        print()
+        input("   Press Enter to stop the container and exit... ")
     finally:
-        print("4. Cleaning up container...")
-        # cleanup_env(container_id, bin_path=bin_path)
+        print("4. Stopping and removing container...")
+        cleanup_env(container_id, bin_path=bin_path)
         print("   Done.")
 
     print("\nNode.js Hello World run complete.")

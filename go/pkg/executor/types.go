@@ -5,7 +5,9 @@ type CreateRuntimeEnvParams struct {
 	Image        string            `json:"image"`
 	Dependencies []string          `json:"dependencies"`
 	EnvVars      map[string]string `json:"env_vars"`
-	Network      bool              `json:"network,omitempty"` // true = allow network; default false
+	Network      bool              `json:"network,omitempty"`   // true = allow network; default false
+	PortBindings map[string]string `json:"port_bindings,omitempty"` // container_port -> host_port, e.g. {"3000": "8080"}
+	UseImageCmd  bool              `json:"use_image_cmd,omitempty"` // true = run image's default CMD (e.g. server); false = run "sleep 86400" for exec-based use
 }
 
 // CreateRuntimeEnvResult is the return value of create_runtime_env.

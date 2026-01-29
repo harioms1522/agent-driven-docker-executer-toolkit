@@ -102,6 +102,23 @@ def test_create_runtime_env_params(mock_subprocess_run):
     assert call_args["network"] is True
 
 
+def test_create_runtime_env_port_bindings(mock_subprocess_run):
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"container_id":"abc","workspace":"/tmp/x"}',
+        stderr="",
+    )
+    create_runtime_env(
+        image="node:20-alpine",
+        port_bindings={"3000": "8080"},
+        network=True,
+        bin_path="/fake/adde",
+    )
+    call_args = json.loads(mock_subprocess_run.call_args[0][0][2])
+    assert call_args["port_bindings"] == {"3000": "8080"}
+    assert call_args["network"] is True
+
+
 def test_execute_code_block_params(mock_subprocess_run):
     mock_subprocess_run.return_value = MagicMock(
         returncode=0,

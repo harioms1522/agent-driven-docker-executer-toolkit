@@ -1,6 +1,6 @@
 # Node.js Hello World — ADDE build_image_from_path example
 
-A minimal Node.js HTTP server that responds with **Hello World** on the root path (`/`). This example is meant to be built with **build_image_from_path**: you already have the project directory (with a Dockerfile), so you build the image directly from it.
+A minimal Node.js HTTP server that responds with **Hello World** on the root path (`/`). This example uses **build_image_from_path** (project directory with Dockerfile) and **port forwarding**: the container’s port 3000 is bound to **127.0.0.1:8080** on the host so you can open http://127.0.0.1:8080/ in your browser.
 
 ## Project layout
 
@@ -28,9 +28,10 @@ python examples/nodejs-helloworld/run_nodejs_helloworld.py
 The script will:
 
 1. Build the image from this directory with **build_image_from_path**
-2. Create a container from the new image
-3. Start the server and hit `http://localhost:3000/` inside the container to verify "Hello World"
-4. Print the response and clean up
+2. Create a container with **port forwarding** (container 3000 → host **8080**)
+3. Start the server in the container in the background
+4. Print **http://127.0.0.1:8080/** — open it in your browser or run `curl http://127.0.0.1:8080/`
+5. Wait for you to press Enter, then stop and remove the container
 
 ### Option 2: CLI
 
@@ -40,10 +41,11 @@ From the **repo root** (replace with your path if needed):
 # Build image from this directory
 adde build_image_from_path '{"path":"examples/nodejs-helloworld","tag":"agent-env:nodejs-helloworld-1"}'
 
-# Create container (use the tag from above)
-adde create_runtime_env '{"image":"agent-env:nodejs-helloworld-1","dependencies":[],"env_vars":{},"network":true}'
+# Create container with port forwarding (3000 -> 8080)
+adde create_runtime_env '{"image":"agent-env:nodejs-helloworld-1","dependencies":[],"env_vars":{},"network":true,"port_bindings":{"3000":"8080"}}'
 
-# Then use the container_id with execute_code_block, get_container_logs, cleanup_env
+# Start the server in the container (background), then open http://127.0.0.1:8080/
+# When done: adde cleanup_env '{"container_id":"<id>"}'
 ```
 
 **PowerShell** (path with backslashes):
@@ -64,7 +66,7 @@ docker run --rm -p 3000:3000 nodejs-helloworld
 
 ## Expected output
 
-When you hit the server (via the run script or curl inside the container):
+When you open **http://127.0.0.1:8080/** in your browser (or `curl http://127.0.0.1:8080/`):
 
 ```
 Hello World
@@ -73,11 +75,15 @@ Hello World
 The run script prints something like:
 
 ```
-1. Building image from path (examples/nodejs-helloworld)...
+1. Building image from path: ...
    Image: agent-env:nodejs-helloworld-<ts>
-2. Creating container...
-3. Starting server and requesting GET / inside container...
-   Response: Hello World
-4. Cleaning up...
-Done.
+2. Creating container with port forwarding (container 3000 -> host 8080)...
+   Container: abc123def456...
+3. Starting server in container (background)...
+   Server started.
+
+   Server is running at  http://127.0.0.1:8080/
+   Open in browser or run: curl http://127.0.0.1:8080/
+
+   Press Enter to stop the container and exit...
 ```

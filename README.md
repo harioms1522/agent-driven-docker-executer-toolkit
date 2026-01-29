@@ -7,7 +7,7 @@ Go toolset + Python client for running agent-generated code in isolated Docker c
 | Requirement | Implementation |
 |-------------|-----------------|
 | **pull_image** | `image`; pulls from default registry so `create_runtime_env` can use it |
-| **create_runtime_env** | `image`, `dependencies[]`, `env_vars{}`; workspace mount at `/workspace`; 512MB / 0.5 CPU; `--network none` unless `network: true` |
+| **create_runtime_env** | `image`, `dependencies[]`, `env_vars{}`; workspace at `/workspace`; 512MB / 0.5 CPU; `--network none` unless `network: true`; optional `port_bindings` (e.g. `{"3000": "8080"}`); optional `use_image_cmd: true` to run the image CMD (e.g. server) instead of `sleep 86400` |
 | **execute_code_block** | `container_id`, `filename`, `code_content`; file via **put_archive** (no shell on code); hard **timeout** (default 30s) |
 | **get_container_logs** | `container_id`, `tail_lines`; returns `{ exit_code, stdout, stderr, execution_time }` (§3.B) |
 | **cleanup_env** | `container_id`; stop + remove |
