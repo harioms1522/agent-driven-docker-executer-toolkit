@@ -189,7 +189,9 @@ func TestExeE2E(t *testing.T) {
 		t.Fatalf("execute_code_block failed: %d stderr=%s stdout=%s", code, stderr, stdout)
 	}
 	var execRes struct {
-		Log   *struct{ Stdout string `json:"stdout"` } `json:"log"`
+		Log *struct {
+			Stdout string `json:"stdout"`
+		} `json:"log"`
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &execRes); err != nil {
@@ -208,7 +210,9 @@ func TestExeE2E(t *testing.T) {
 		t.Fatalf("get_container_logs failed: %d", code)
 	}
 	var logsRes struct {
-		Log   *struct{ Stdout string `json:"stdout"` } `json:"log"`
+		Log *struct {
+			Stdout string `json:"stdout"`
+		} `json:"log"`
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &logsRes); err != nil {
@@ -246,7 +250,9 @@ func TestExeE2EBusyBox(t *testing.T) {
 		t.Fatalf("execute_code_block failed: %d stderr=%s stdout=%s", code, stderr, stdout)
 	}
 	var execRes struct {
-		Log   *struct{ Stdout string `json:"stdout"` } `json:"log"`
+		Log *struct {
+			Stdout string `json:"stdout"`
+		} `json:"log"`
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &execRes); err != nil {
