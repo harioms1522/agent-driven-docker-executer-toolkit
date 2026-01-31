@@ -36,10 +36,28 @@ From the repo root:
 ```bash
 cd go
 go mod tidy
-go build -o adde.exe ./cmd/adde   # Windows
-# or
-go build -o adde ./cmd/adde       # Linux/macOS
+go build -o adde.exe ./cmd/adde   # Windows (native)
+go build -o adde ./cmd/adde       # Linux/macOS (native)
 ```
+
+**Build a Linux binary** (e.g. for CI or a Linux server):
+
+- On Linux (native):
+  ```bash
+  cd go
+  go build -o adde ./cmd/adde
+  ```
+
+- From Windows or macOS (cross-compile):
+  ```bash
+  cd go
+  GOOS=linux GOARCH=amd64 go build -o adde ./cmd/adde
+  ```
+  For Linux ARM64 (e.g. many cloud/ARM instances):
+  ```bash
+  GOOS=linux GOARCH=arm64 go build -o adde ./cmd/adde
+  ```
+  The resulting `adde` binary runs on Linux; use it with `ADDE_BIN` or put it on the target machine’s `PATH`.
 
 Ensure **Docker** is running and the daemon is reachable (e.g. `DOCKER_HOST` if remote). Use **pull_image** (or `docker pull`) before `create_runtime_env` if the image is not already present.
 
